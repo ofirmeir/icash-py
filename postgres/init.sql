@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS products (
+  id SERIAL PRIMARY KEY,
+  product_name TEXT UNIQUE NOT NULL,
+  unit_price NUMERIC NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS purchases (
+  id SERIAL PRIMARY KEY,
+  supermarket_id TEXT NOT NULL,
+  timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+  user_id TEXT NOT NULL,
+  total_amount NUMERIC NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS purchase_items (
+  id SERIAL PRIMARY KEY,
+  purchase_id INTEGER NOT NULL REFERENCES purchases(id) ON DELETE CASCADE,
+  product_id INTEGER NOT NULL REFERENCES products(id),
+  quantity INTEGER NOT NULL,
+  line_total NUMERIC NOT NULL
+);
