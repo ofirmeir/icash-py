@@ -94,6 +94,7 @@ def upload_products():
             existing = session.query(Product).filter_by(product_name=name).first()
             if existing:
                 existing.unit_price = price
+                session.commit()
             else:
                 session.add(Product(product_name=name, unit_price=price))
         session.commit()
