@@ -30,6 +30,7 @@ class PurchaseItem(Base):
     __tablename__ = "purchase_items"
     id = Column(Integer, primary_key=True)
     product_id = Column(Integer, ForeignKey("products.id"))
+    product = relationship("Product")
     total_purchases = Column(Integer, nullable=False)
 
 class User(Base):
@@ -131,7 +132,7 @@ def upload_purchases():
         flash(f"CSV must have columns: {', '.join(expected_cols)}")
         return redirect(url_for("index"))
 
-    users = {}
+    inserted_count = 0
     # go over rows and insert purchases
     with Session(engine) as session:
         for _, row in df.iterrows():
@@ -155,22 +156,38 @@ def upload_purchases():
                 existing_user_total_purchase_db_record.total_purchases += 1
                 session.commit()
 
+            # handle items list
+            items_list = items_list_str.split(",")
+            for item_name in items_list:
+                item_name = item_name.strip()
+                product_db_record = session.query(Product).filter_by(product_name=item_name).first()
+                if not product_db_record:
+                    flash(f"Product '{item_name}' not found in DB.")
+                    session.rollback()
+                    return redirect(url_for("index"))
+                else: # the product exist in the database, update PurchaseItem table
+                    purchase_item = session.query(PurchaseItem).filter_by(product_id=product_db_record.id).first()
+                    if not purchase_item:
+                        new_purchase_item_db_record = PurchaseItem(product_id=product_db_record.id, total_purchases=1)
+                        session.add(new_purchase_item_db_record)
+                        session.commit()
+                    else:
+                        purchase_item.total_purchases += 1
+                        session.commit()
 
-            # purchase = Purchase(
-            #     supermarket_id=supermarket_id,
-            #     timestamp=timestamp,
-            #     user_id=user_id,
-            #     items_list=items_list_str,
-            #     total_amount=total_amount
-            # )
-            # session.add(purchase)
-            # session.flush()  # get purchase.id
+            # try to insert purchase record
+            purchase = Purchase(
+                supermarket_id=supermarket_id,
+                timestamp=timestamp,
+                user_id=user_id,
+                items_list=items_list_str,
+                total_amount=total_amount
+            )
+            session.add(purchase)
+            inserted_count += 1
+            session.flush()
 
-        session.commit()
-
-
-
-    inserted_count = 0
+    session.commit()
 
     flash(f"Loaded {inserted_count} purchases successfully.")
     return redirect(url_for("index"))
