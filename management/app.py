@@ -23,18 +23,27 @@ class Purchase(Base):
     supermarket_id = Column(String, nullable=False)
     timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
     user_id = Column(String, nullable=False)
+    items_list = Column(String, nullable=False)
     total_amount = Column(Numeric, nullable=False)
-    items = relationship("PurchaseItem", back_populates="purchase", cascade="all, delete-orphan")
 
 class PurchaseItem(Base):
     __tablename__ = "purchase_items"
     id = Column(Integer, primary_key=True)
-    purchase_id = Column(Integer, ForeignKey("purchases.id", ondelete="CASCADE"))
     product_id = Column(Integer, ForeignKey("products.id"))
-    quantity = Column(Integer, nullable=False)
-    line_total = Column(Numeric, nullable=False)
-    purchase = relationship("Purchase", back_populates="items")
-    product = relationship("Product")
+    total_purchases = Column(Integer, nullable=False)
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(String, unique=True, nullable=False)
+    total_purchases = relationship("TotalUserPurchases", back_populates="user", uselist=False)
+
+class TotalUserPurchases(Base):
+    __tablename__ = "user_total_purchases"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(String, ForeignKey("users.user_id"), nullable=False)
+    user = relationship("User", back_populates="total_purchases")
+    total_purchases = Column(Integer, nullable=True)
 
 Base.metadata.create_all(engine)
 
@@ -52,10 +61,17 @@ INDEX_HTML = """
 <body class="p-4">
   <div class="container">
     <h2>Management UI</h2>
-    <form method="post" action="/upload_products" enctype="multipart/form-data">
-      <label>Upload products.csv</label>
+
+    <h4>📦 Upload Products</h4>
+    <form method="post" action="/upload_products" enctype="multipart/form-data" class="mb-4">
       <input type="file" name="file" accept=".csv" required>
-      <button class="btn btn-primary">Upload</button>
+      <button class="btn btn-primary btn-sm">Upload products_list.csv</button>
+    </form>
+
+    <h4>🧾 Upload Purchases</h4>
+    <form method="post" action="/upload_purchases" enctype="multipart/form-data" class="mb-4">
+      <input type="file" name="file" accept=".csv" required>
+      <button class="btn btn-success btn-sm">Upload purchases.csv</button>
     </form>
     <hr>
     <a href="/recent" class="btn btn-outline-secondary">View Most Recent Purchase</a>
@@ -100,6 +116,65 @@ def upload_products():
         session.commit()
     flash(f"Loaded {len(df)} products.")
     return redirect(url_for("index"))
+
+
+@app.route("/upload_purchases", methods=["POST"])
+def upload_purchases():
+    f = request.files.get("file")
+    if not f:
+        flash("No file uploaded")
+        return redirect(url_for("index"))
+
+    df = pd.read_csv(f)
+    expected_cols = {"supermarket_id", "timestamp", "user_id", "items_list", "total_amount"}
+    if not expected_cols.issubset(df.columns):
+        flash(f"CSV must have columns: {', '.join(expected_cols)}")
+        return redirect(url_for("index"))
+
+    users = {}
+    # go over rows and insert purchases
+    with Session(engine) as session:
+        for _, row in df.iterrows():
+            supermarket_id = str(row["supermarket_id"])
+            timestamp = parser.parse(str(row["timestamp"]))
+            user_id = str(row["user_id"])
+            items_list_str = str(row["items_list"])
+            total_amount = float(row["total_amount"])
+
+            # store user if not exists
+            user = session.query(User).filter_by(user_id=user_id).first()
+            if not user: # the user had not existed before in the database, create it
+                new_user_db_record = User(user_id=user_id)
+                new_user_total_purchase_db_record = TotalUserPurchases(user_id=user_id, total_purchases=1)
+                session.add(new_user_db_record)
+                session.add(new_user_total_purchase_db_record)
+                session.commit()
+                session.flush()
+            else: # the user exist in the database, update it
+                existing_user_total_purchase_db_record = session.query(TotalUserPurchases).filter_by(user_id=user_id).first()
+                existing_user_total_purchase_db_record.total_purchases += 1
+                session.commit()
+
+
+            # purchase = Purchase(
+            #     supermarket_id=supermarket_id,
+            #     timestamp=timestamp,
+            #     user_id=user_id,
+            #     items_list=items_list_str,
+            #     total_amount=total_amount
+            # )
+            # session.add(purchase)
+            # session.flush()  # get purchase.id
+
+        session.commit()
+
+
+
+    inserted_count = 0
+
+    flash(f"Loaded {inserted_count} purchases successfully.")
+    return redirect(url_for("index"))
+
 
 @app.route("/recent")
 def recent_purchase():
