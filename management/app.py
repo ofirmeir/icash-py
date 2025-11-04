@@ -214,7 +214,29 @@ BEST_HTML = """
   <div class="container">
     <a href="/" class="btn btn-secondary">Return home</a>
     <h2>Best Sellers</h2>
-    <p>This page will show best selling products (placeholder).</p>
+    <p>This page shows the 3 best selling products (or more, if the same amount of items was sold of them).</p>
+    {% if top_sellers %}
+      <div class="table-responsive">
+        <table class="table table-striped table-bordered">
+          <thead>
+            <tr>
+              <th scope="col">id</th>
+              <th scope="col">number of purchases</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for product_name, num in top_sellers %}
+              <tr>
+                <td>{{ product_name }}</td>
+                <td>{{ num }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="alert alert-info">No loyal customers found.</div>
+    {% endif %}
   </div>
 </body>
 </html>
@@ -395,7 +417,34 @@ def unique_customers():
 @app.route("/best_sellers")
 def best_sellers():
     """Render a simple Best Sellers page with a Return home button."""
-    return render_template_string(BEST_HTML)
+    with Session(engine) as session:
+        logger = logging.getLogger("app.best_sellers")
+        # get the top 3 best selling products from the postgresql database
+        logger.debug("Retrieving top 3 best selling products")
+        ordered_purchase_items = session.query(PurchaseItem).join(Product).order_by(PurchaseItem.total_purchases.desc()).all()
+        top_sellers_numbers = []
+        top_sellers = []
+        for item in ordered_purchase_items:
+            if len(set(top_sellers_numbers)) <= 3:
+                checked_item_total_purchases = item.total_purchases
+                checked_item_product_name = item.product.product_name
+                if checked_item_total_purchases in top_sellers_numbers:
+                    logger.debug("Adding a new top selling product '%s', with %d purchases", checked_item_product_name, checked_item_total_purchases)
+                    top_sellers.append((checked_item_product_name,checked_item_total_purchases))
+                    continue
+                else:
+                    if len(set(top_sellers_numbers)) < 3:
+                        logger.debug("Adding a new top selling product '%s', with %d purchases", checked_item_product_name, checked_item_total_purchases)
+                        top_sellers_numbers.append(checked_item_total_purchases)
+                        top_sellers.append((checked_item_product_name,checked_item_total_purchases))
+                    else: # len == 3: we already have 3 different numbers of top sellers, we won't add more
+                        logger.debug("Top 3 best selling products retrieved")
+                        break
+            else:
+                break
+        logging.getLogger("app.best_sellers").info("Top selling products retrieved")
+
+    return render_template_string(BEST_HTML, top_sellers=top_sellers)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
