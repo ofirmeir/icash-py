@@ -155,7 +155,31 @@ LOYAL_HTML = """
 <body class="p-4">
   <div class="container">
     <h2>Loyal Customers</h2>
-    <p>This page will show loyal customers (placeholder).</p>
+    <p>This page shows loyal customers (customers with >= threshold purchases).</p>
+
+    {% if loyal_customers_list %}
+      <div class="table-responsive">
+        <table class="table table-striped table-bordered">
+          <thead>
+            <tr>
+              <th scope="col">id</th>
+              <th scope="col">number of purchases</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for cid, num in loyal_customers_list %}
+              <tr>
+                <td>{{ cid }}</td>
+                <td>{{ num }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="alert alert-info">No loyal customers found.</div>
+    {% endif %}
+
     <a href="/" class="btn btn-secondary">Return home</a>
   </div>
 </body>
@@ -348,12 +372,20 @@ def recent_purchase():
 @app.route("/loyal_customers")
 def loyal_customers():
     """Render a simple Loyal Customers page with a Return home button."""
-    return render_template_string(LOYAL_HTML)
+    number_of_purchases_threshold = 3
+    # get a list of loyal customers containing id and number of purchases from the postgresql database
+    with Session(engine) as session:
+        loyal_customers_list = session.query(User).join(TotalUserPurchases).filter(TotalUserPurchases.total_purchases >= number_of_purchases_threshold).all()
+        logging.getLogger("app.loyal_customers").info("Number of loyal customers: %d", len(loyal_customers_list))
+        # get only the user_id and total_purchases for each loyal customer
+        loyal_customers_trimmed_list = [(customer.user_id, customer.total_purchases.total_purchases) for customer in loyal_customers_list]
+
+    return render_template_string(LOYAL_HTML, loyal_customers_list=loyal_customers_trimmed_list)
 
 @app.route("/unique_customers")
 def unique_customers():
     """Render a simple Unique Customers page with a Return home button."""
-    # get the number of unique customers from the postgress database
+    # get the number of unique customers from the postgresql database
     with Session(engine) as session:
         unique_customers_count = session.query(User).count()
         logging.getLogger("app.unique_customers").info("Number of unique customers: %d", unique_customers_count)
