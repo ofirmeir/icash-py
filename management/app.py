@@ -154,6 +154,7 @@ LOYAL_HTML = """
 </head>
 <body class="p-4">
   <div class="container">
+    <a href="/" class="btn btn-secondary">Return home</a>
     <h2>Loyal Customers</h2>
     <p>This page shows loyal customers (customers with >= threshold purchases).</p>
 
@@ -180,7 +181,6 @@ LOYAL_HTML = """
       <div class="alert alert-info">No loyal customers found.</div>
     {% endif %}
 
-    <a href="/" class="btn btn-secondary">Return home</a>
   </div>
 </body>
 </html>
@@ -195,9 +195,9 @@ UNIQUE_HTML = """
 </head>
 <body class="p-4">
   <div class="container">
+    <a href="/" class="btn btn-secondary">Return home</a>
     <h2>Unique Customers</h2>
     <p>The number of unique customers is: {{ unique_customers_count }}</p>
-    <a href="/" class="btn btn-secondary">Return home</a>
   </div>
 </body>
 </html>
@@ -212,9 +212,9 @@ BEST_HTML = """
 </head>
 <body class="p-4">
   <div class="container">
+    <a href="/" class="btn btn-secondary">Return home</a>
     <h2>Best Sellers</h2>
     <p>This page will show best selling products (placeholder).</p>
-    <a href="/" class="btn btn-secondary">Return home</a>
   </div>
 </body>
 </html>
