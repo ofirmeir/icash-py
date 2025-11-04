@@ -1,7 +1,6 @@
 from flask import Flask, render_template_string, request, redirect, url_for, flash, jsonify
 from sqlalchemy import create_engine, Column, Integer, String, Numeric, ForeignKey, TIMESTAMP
 from sqlalchemy.orm import declarative_base, relationship, Session
-from datetime import datetime
 import pandas as pd
 from dateutil import parser
 import os
@@ -123,6 +122,14 @@ INDEX_HTML = """
     </form>
     <hr>
     <a href="/recent" class="btn btn-outline-secondary">View Most Recent Purchase</a>
+
+    <!-- New buttons for the requested pages -->
+    <div class="mt-3">
+      <a href="/loyal_customers" class="btn btn-outline-primary me-2">Loyal Customers</a>
+      <a href="/unique_customers" class="btn btn-outline-info me-2">Unique Customers</a>
+      <a href="/best_sellers" class="btn btn-outline-warning">Best Sellers</a>
+    </div>
+
     {% with messages = get_flashed_messages() %}
       {% if messages %}
         <div class="mt-3">
@@ -137,6 +144,63 @@ INDEX_HTML = """
 </html>
 """
 
+# New simple pages for the three routes
+LOYAL_HTML = """
+<!doctype html>
+<html>
+<head>
+  <title>Loyal Customers</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="p-4">
+  <div class="container">
+    <h2>Loyal Customers</h2>
+    <p>This page will show loyal customers (placeholder).</p>
+    <a href="/" class="btn btn-secondary">Return home</a>
+  </div>
+</body>
+</html>
+"""
+
+UNIQUE_HTML = """
+<!doctype html>
+<html>
+<head>
+  <title>Unique Customers</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="p-4">
+  <div class="container">
+    <h2>Unique Customers</h2>
+    <p>The number of unique customers is: {{ unique_customers_count }}</p>
+    <a href="/" class="btn btn-secondary">Return home</a>
+  </div>
+</body>
+</html>
+"""
+
+BEST_HTML = """
+<!doctype html>
+<html>
+<head>
+  <title>Best Sellers</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="p-4">
+  <div class="container">
+    <h2>Best Sellers</h2>
+    <p>This page will show best selling products (placeholder).</p>
+    <a href="/" class="btn btn-secondary">Return home</a>
+  </div>
+</body>
+</html>
+"""
+
+# ----------------- HELPERS -----------------
+
+
+
+# ----------------- ROUTES -----------------
 @app.route("/")
 def index():
     return render_template_string(INDEX_HTML)
@@ -280,6 +344,26 @@ def recent_purchase():
             ]
         }
         return jsonify(data)
+
+@app.route("/loyal_customers")
+def loyal_customers():
+    """Render a simple Loyal Customers page with a Return home button."""
+    return render_template_string(LOYAL_HTML)
+
+@app.route("/unique_customers")
+def unique_customers():
+    """Render a simple Unique Customers page with a Return home button."""
+    # get the number of unique customers from the postgress database
+    with Session(engine) as session:
+        unique_customers_count = session.query(User).count()
+        logging.getLogger("app.unique_customers").info("Number of unique customers: %d", unique_customers_count)
+
+    return render_template_string(UNIQUE_HTML, unique_customers_count=unique_customers_count)
+
+@app.route("/best_sellers")
+def best_sellers():
+    """Render a simple Best Sellers page with a Return home button."""
+    return render_template_string(BEST_HTML)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
