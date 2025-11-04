@@ -5,10 +5,57 @@ from datetime import datetime
 import pandas as pd
 from dateutil import parser
 import os
+import logging
+import configparser
+import sys
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://appuser:apassword@db:5432/appdb")
 engine = create_engine(DATABASE_URL, echo=False, future=True)
 Base = declarative_base()
+
+# ----------------- LOGGER -----------------
+
+def setup_logging(config_path: str = "log.cfg"):
+    """
+    Read `config_path` for section [logging] key `level` and configure
+    root logger to output to console (stdout) at that level.
+    """
+    cfg = configparser.ConfigParser()
+    level_name = "INFO"
+    if os.path.exists(config_path):
+        try:
+            cfg.read(config_path)
+            level_name = cfg.get("logging", "level", fallback=level_name).upper()
+        except Exception:
+            # fallback to default if parsing fails
+            level_name = "INFO"
+    else:
+        # no config file, use default or env override
+        level_name = os.getenv("LOG_LEVEL", level_name).upper()
+
+    level = getattr(logging, level_name, logging.INFO)
+
+    root = logging.getLogger()
+    # clear existing handlers to avoid duplicates when reloading
+    for h in list(root.handlers):
+        root.removeHandler(h)
+
+    root.setLevel(level)
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(level)
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    console_handler.setFormatter(formatter)
+    root.addHandler(console_handler)
+
+    # reduce overly-verbose third-party loggers if desired
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+    logging.getLogger("werkzeug").setLevel(level)
+
+    root.info("Logging initialized from %s with level %s", config_path, level_name)
+
+# Call setup_logging early in startup (before creating engine/app)
+setup_logging("log.cfg")
+
 
 # ----------------- MODELS -----------------
 class Product(Base):
@@ -96,23 +143,29 @@ def index():
 
 @app.route("/upload_products", methods=["POST"])
 def upload_products():
+    logger = logging.getLogger("app.upload_products")
     f = request.files.get("file")
     if not f:
         flash("No file uploaded")
+        logger.warning("No file uploaded")
         return redirect(url_for("index"))
     df = pd.read_csv(f)
     if "product_name" not in df.columns or "unit_price" not in df.columns:
         flash("CSV must have 'product_name' and 'unit_price'")
+        logger.warning("CSV missing required columns")
         return redirect(url_for("index"))
     with Session(engine) as session:
+        logger.info(f"Uploading {len(df)} products")
         for _, row in df.iterrows():
             name = str(row["product_name"])
             price = float(row["unit_price"])
             existing = session.query(Product).filter_by(product_name=name).first()
             if existing:
+                logger.debug("The product '%s' exists in the Database, updating price to %s", name, price)
                 existing.unit_price = price
                 session.commit()
             else:
+                logger.debug("The product '%s' doesn't exist in the Database, creating it", name)
                 session.add(Product(product_name=name, unit_price=price))
         session.commit()
     flash(f"Loaded {len(df)} products.")
@@ -121,20 +174,24 @@ def upload_products():
 
 @app.route("/upload_purchases", methods=["POST"])
 def upload_purchases():
+    logger = logging.getLogger("app.upload_purchases")
     f = request.files.get("file")
     if not f:
         flash("No file uploaded")
+        logger.warning("No file uploaded")
         return redirect(url_for("index"))
 
     df = pd.read_csv(f)
     expected_cols = {"supermarket_id", "timestamp", "user_id", "items_list", "total_amount"}
     if not expected_cols.issubset(df.columns):
         flash(f"CSV must have columns: {', '.join(expected_cols)}")
+        logger.warning("CSV missing required columns")
         return redirect(url_for("index"))
 
     inserted_count = 0
     # go over rows and insert purchases
     with Session(engine) as session:
+        logger.info("Uploading %d purchases", len(df))
         for _, row in df.iterrows():
             supermarket_id = str(row["supermarket_id"])
             timestamp = parser.parse(str(row["timestamp"]))
@@ -145,6 +202,7 @@ def upload_purchases():
             # store user if not exists
             user = session.query(User).filter_by(user_id=user_id).first()
             if not user: # the user had not existed before in the database, create it
+                logger.debug("The user '%s' doesn't exist in the Database, creating it", user_id)
                 new_user_db_record = User(user_id=user_id)
                 new_user_total_purchase_db_record = TotalUserPurchases(user_id=user_id, total_purchases=1)
                 session.add(new_user_db_record)
@@ -152,6 +210,7 @@ def upload_purchases():
                 session.commit()
                 session.flush()
             else: # the user exist in the database, update it
+                logger.debug("The user '%s' exists in the Database, updating total purchases", user_id)
                 existing_user_total_purchase_db_record = session.query(TotalUserPurchases).filter_by(user_id=user_id).first()
                 existing_user_total_purchase_db_record.total_purchases += 1
                 session.commit()
@@ -163,19 +222,24 @@ def upload_purchases():
                 product_db_record = session.query(Product).filter_by(product_name=item_name).first()
                 if not product_db_record:
                     flash(f"Product '{item_name}' not found in DB.")
+                    logger.warning("Product '%s' doesn't exist in the Database", item_name)
                     session.rollback()
                     return redirect(url_for("index"))
                 else: # the product exist in the database, update PurchaseItem table
+                    logger.debug("The product '%s' exists in the Database, updating PurchaseItem table", item_name)
                     purchase_item = session.query(PurchaseItem).filter_by(product_id=product_db_record.id).first()
                     if not purchase_item:
+                        logger.debug("The PurchaseItem for product '%s' doesn't exist in the Database, creating it", item_name)
                         new_purchase_item_db_record = PurchaseItem(product_id=product_db_record.id, total_purchases=1)
                         session.add(new_purchase_item_db_record)
                         session.commit()
                     else:
+                        logger.debug("The PurchaseItem for product '%s' exists in the Database, updating total purchases", item_name)
                         purchase_item.total_purchases += 1
                         session.commit()
 
             # try to insert purchase record
+            logger.debug("Inserting a new purchase for user '%s' at '%s' at '%s'", user_id, supermarket_id, timestamp.isoformat())
             purchase = Purchase(
                 supermarket_id=supermarket_id,
                 timestamp=timestamp,
@@ -190,6 +254,7 @@ def upload_purchases():
     session.commit()
 
     flash(f"Loaded {inserted_count} purchases successfully.")
+    logger.info(f"Loaded {inserted_count} purchases successfully.")
     return redirect(url_for("index"))
 
 
