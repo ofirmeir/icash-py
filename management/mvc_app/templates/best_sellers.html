@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+<head>
+  <title>Best Sellers</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="p-4">
+  <div class="container">
+    <a href="/" class="btn btn-secondary">Return home</a>
+    <h2>Best Sellers</h2>
+    <p>This page shows the 3 best selling products (or more, if the same amount of items was sold of them).</p>
+    {% if top_sellers %}
+      <div class="table-responsive">
+        <table class="table table-striped table-bordered">
+          <thead>
+            <tr>
+              <th scope="col">id</th>
+              <th scope="col">number of purchases</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for product_name, num in top_sellers %}
+              <tr>
+                <td>{{ product_name }}</td>
+                <td>{{ num }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="alert alert-info">No loyal customers found.</div>
+    {% endif %}
+  </div>
+</body>
+</html>
+
