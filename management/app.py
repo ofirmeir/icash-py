@@ -156,7 +156,7 @@ LOYAL_HTML = """
   <div class="container">
     <a href="/" class="btn btn-secondary">Return home</a>
     <h2>Loyal Customers</h2>
-    <p>This page shows loyal customers (customers with >= threshold purchases).</p>
+    <p>This page shows loyal customers (customers who had bought more than 3 times).</p>
 
     {% if loyal_customers_list %}
       <div class="table-responsive">
@@ -396,8 +396,8 @@ def loyal_customers():
     """Render a simple Loyal Customers page with a Return home button."""
     number_of_purchases_threshold = 3
     # get a list of loyal customers containing id and number of purchases from the postgresql database
-    with Session(engine) as session:
-        loyal_customers_list = session.query(User).join(TotalUserPurchases).filter(TotalUserPurchases.total_purchases >= number_of_purchases_threshold).all()
+    with (Session(engine) as session):
+        loyal_customers_list = session.query(User).join(TotalUserPurchases).filter(TotalUserPurchases.total_purchases >= number_of_purchases_threshold).order_by(TotalUserPurchases.total_purchases.desc()).all()
         logging.getLogger("app.loyal_customers").info("Number of loyal customers: %d", len(loyal_customers_list))
         # get only the user_id and total_purchases for each loyal customer
         loyal_customers_trimmed_list = [(customer.user_id, customer.total_purchases.total_purchases) for customer in loyal_customers_list]
