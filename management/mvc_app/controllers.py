@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from .db import SessionLocal
-from .models import Product, Purchase, PurchaseItem, User, TotalUserPurchases
+from .models import Product, Purchase, PurchaseItem, User, TotalUserPurchases, Store
 from .logging_config import setup_logging
 import pandas as pd
 from dateutil import parser
@@ -67,32 +67,45 @@ def upload_purchases():
             user_id = str(row["user_id"]).strip()
             items_list_str = str(row["items_list"])
             total_amount = float(row["total_amount"])
+            # Handle User
             user = session.query(User).filter_by(user_id=user_id).first()
             if not user:
+                logger.debug("Creating new user %s", user_id)
                 new_user = User(user_id=user_id)
                 new_total = TotalUserPurchases(user_id=user_id, total_purchases=1)
                 session.add(new_user)
                 session.add(new_total)
                 session.commit()
             else:
+                logger.debug("Updating user %s", user_id)
                 existing_total = session.query(TotalUserPurchases).filter_by(user_id=user_id).first()
                 existing_total.total_purchases = (existing_total.total_purchases or 0) + 1
                 session.commit()
+            # Handle Items
             items_list = [i.strip() for i in items_list_str.split(",") if i.strip()]
             for item_name in items_list:
                 product_db_record = session.query(Product).filter_by(product_name=item_name).first()
                 if not product_db_record:
-                    flash(f"Product '{item_name}' not found in DB.")
-                    logger.warning("Product '%s' doesn't exist in the Database", item_name)
+                    logger.debug("Creating new product %s", item_name)
                     session.rollback()
                     return redirect(url_for("main.index"))
+                # Handle PurchaseItem
                 purchase_item = session.query(PurchaseItem).filter_by(product_id=product_db_record.id).first()
                 if not purchase_item:
+                    logger.debug("Creating new PurchaseItem for product %s", item_name)
                     new_pi = PurchaseItem(product_id=product_db_record.id, total_purchases=1)
                     session.add(new_pi)
                 else:
-                    purchase_item.total_purchases = (purchase_item.total_purchases or 0) + 1
+                    purchase_item.total_purchases += 1
                 session.commit()
+            # Handle Store
+            store = session.query(Store).filter_by(store_id=supermarket_id).first()
+            if not store:
+                logger.debug("Store %s doesn't exist in the database", supermarket_id)
+                new_store = Store(store_id=supermarket_id)
+                session.add(new_store)
+                session.commit()
+            # Create Purchase
             purchase = Purchase(
                 supermarket_id=supermarket_id,
                 timestamp=timestamp,

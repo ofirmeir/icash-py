@@ -37,3 +37,7 @@ class TotalUserPurchases(Base):
     user = relationship("User", back_populates="total_purchases")
     total_purchases = Column(Integer, nullable=True)
 
+class Store(Base):
+    __tablename__ = "stores"
+    id = Column(Integer, primary_key=True)
+    store_id = Column(String, unique=True, nullable=False)
