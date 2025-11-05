@@ -1,7 +1,6 @@
 from flask import Flask, render_template_string, request, redirect, url_for, flash, jsonify
 from sqlalchemy import create_engine, Column, Integer, String, Numeric, ForeignKey, TIMESTAMP
 from sqlalchemy.orm import declarative_base, relationship, Session
-from datetime import datetime
 import pandas as pd
 from dateutil import parser
 import os
@@ -123,6 +122,14 @@ INDEX_HTML = """
     </form>
     <hr>
     <a href="/recent" class="btn btn-outline-secondary">View Most Recent Purchase</a>
+
+    <!-- New buttons for the requested pages -->
+    <div class="mt-3">
+      <a href="/loyal_customers" class="btn btn-outline-primary me-2">Loyal Customers</a>
+      <a href="/unique_customers" class="btn btn-outline-info me-2">Unique Customers</a>
+      <a href="/best_sellers" class="btn btn-outline-warning">Best Sellers</a>
+    </div>
+
     {% with messages = get_flashed_messages() %}
       {% if messages %}
         <div class="mt-3">
@@ -137,6 +144,109 @@ INDEX_HTML = """
 </html>
 """
 
+# New simple pages for the three routes
+LOYAL_HTML = """
+<!doctype html>
+<html>
+<head>
+  <title>Loyal Customers</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="p-4">
+  <div class="container">
+    <a href="/" class="btn btn-secondary">Return home</a>
+    <h2>Loyal Customers</h2>
+    <p>This page shows loyal customers (customers who had bought more than 3 times).</p>
+
+    {% if loyal_customers_list %}
+      <div class="table-responsive">
+        <table class="table table-striped table-bordered">
+          <thead>
+            <tr>
+              <th scope="col">id</th>
+              <th scope="col">number of purchases</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for cid, num in loyal_customers_list %}
+              <tr>
+                <td>{{ cid }}</td>
+                <td>{{ num }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="alert alert-info">No loyal customers found.</div>
+    {% endif %}
+
+  </div>
+</body>
+</html>
+"""
+
+UNIQUE_HTML = """
+<!doctype html>
+<html>
+<head>
+  <title>Unique Customers</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="p-4">
+  <div class="container">
+    <a href="/" class="btn btn-secondary">Return home</a>
+    <h2>Unique Customers</h2>
+    <p>The number of unique customers is: {{ unique_customers_count }}</p>
+  </div>
+</body>
+</html>
+"""
+
+BEST_HTML = """
+<!doctype html>
+<html>
+<head>
+  <title>Best Sellers</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="p-4">
+  <div class="container">
+    <a href="/" class="btn btn-secondary">Return home</a>
+    <h2>Best Sellers</h2>
+    <p>This page shows the 3 best selling products (or more, if the same amount of items was sold of them).</p>
+    {% if top_sellers %}
+      <div class="table-responsive">
+        <table class="table table-striped table-bordered">
+          <thead>
+            <tr>
+              <th scope="col">id</th>
+              <th scope="col">number of purchases</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for product_name, num in top_sellers %}
+              <tr>
+                <td>{{ product_name }}</td>
+                <td>{{ num }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="alert alert-info">No loyal customers found.</div>
+    {% endif %}
+  </div>
+</body>
+</html>
+"""
+
+# ----------------- HELPERS -----------------
+
+
+
+# ----------------- ROUTES -----------------
 @app.route("/")
 def index():
     return render_template_string(INDEX_HTML)
@@ -280,6 +390,61 @@ def recent_purchase():
             ]
         }
         return jsonify(data)
+
+@app.route("/loyal_customers")
+def loyal_customers():
+    """Render a simple Loyal Customers page with a Return home button."""
+    number_of_purchases_threshold = 3
+    # get a list of loyal customers containing id and number of purchases from the postgresql database
+    with (Session(engine) as session):
+        loyal_customers_list = session.query(User).join(TotalUserPurchases).filter(TotalUserPurchases.total_purchases >= number_of_purchases_threshold).order_by(TotalUserPurchases.total_purchases.desc()).all()
+        logging.getLogger("app.loyal_customers").info("Number of loyal customers: %d", len(loyal_customers_list))
+        # get only the user_id and total_purchases for each loyal customer
+        loyal_customers_trimmed_list = [(customer.user_id, customer.total_purchases.total_purchases) for customer in loyal_customers_list]
+
+    return render_template_string(LOYAL_HTML, loyal_customers_list=loyal_customers_trimmed_list)
+
+@app.route("/unique_customers")
+def unique_customers():
+    """Render a simple Unique Customers page with a Return home button."""
+    # get the number of unique customers from the postgresql database
+    with Session(engine) as session:
+        unique_customers_count = session.query(User).count()
+        logging.getLogger("app.unique_customers").info("Number of unique customers: %d", unique_customers_count)
+
+    return render_template_string(UNIQUE_HTML, unique_customers_count=unique_customers_count)
+
+@app.route("/best_sellers")
+def best_sellers():
+    """Render a simple Best Sellers page with a Return home button."""
+    with Session(engine) as session:
+        logger = logging.getLogger("app.best_sellers")
+        # get the top 3 best selling products from the postgresql database
+        logger.debug("Retrieving top 3 best selling products")
+        ordered_purchase_items = session.query(PurchaseItem).join(Product).order_by(PurchaseItem.total_purchases.desc()).all()
+        top_sellers_numbers = []
+        top_sellers = []
+        for item in ordered_purchase_items:
+            if len(set(top_sellers_numbers)) <= 3:
+                checked_item_total_purchases = item.total_purchases
+                checked_item_product_name = item.product.product_name
+                if checked_item_total_purchases in top_sellers_numbers:
+                    logger.debug("Adding a new top selling product '%s', with %d purchases", checked_item_product_name, checked_item_total_purchases)
+                    top_sellers.append((checked_item_product_name,checked_item_total_purchases))
+                    continue
+                else:
+                    if len(set(top_sellers_numbers)) < 3:
+                        logger.debug("Adding a new top selling product '%s', with %d purchases", checked_item_product_name, checked_item_total_purchases)
+                        top_sellers_numbers.append(checked_item_total_purchases)
+                        top_sellers.append((checked_item_product_name,checked_item_total_purchases))
+                    else: # len == 3: we already have 3 different numbers of top sellers, we won't add more
+                        logger.debug("Top 3 best selling products retrieved")
+                        break
+            else:
+                break
+        logging.getLogger("app.best_sellers").info("Top selling products retrieved")
+
+    return render_template_string(BEST_HTML, top_sellers=top_sellers)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
