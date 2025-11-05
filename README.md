@@ -43,8 +43,6 @@ Each purchase includes supermarket ID, user ID, and item list.
 Looks up item prices from the database and saves a normalized purchase record.
 
 
-Endpoint /recent to fetch the most recent purchase as JSON.
-
 
 Management UI
 
@@ -53,9 +51,6 @@ Uploads products.csv → updates/creates product entries.
 
 
 Uploads purchases.csv → imports normalized purchase data (into purchases + purchase_items).
-
-
-Endpoint /recent → returns most recent purchase in the database.
 
 
 CSV uploads validated and errors displayed in UI.
@@ -100,18 +95,26 @@ banana,0.3
 milk,2.5
 bread,1.2
 
-
-2. (Optional) Load Purchases Data
+2. Load Purchases Data
 Still in Management UI, upload purchases.csv file:
 Example:
 ```text
 supermarket_id,timestamp,user_id,items_list,total_amount
-SM1,2025-10-28T08:12:00Z,u001,apple:2,1.0
-SM1,2025-10-28T09:30:00Z,u002,banana:3,milk:1,3.4
-SM2,2025-10-28T10:00:00Z,u003,bread:2,milk:1,4.9
+SM1,2025-10-28T08:12:00Z,u001,apple,1.0
+SM1,2025-10-28T09:30:00Z,u002,banana,milk,3.4
+SM2,2025-10-28T10:00:00Z,u003,bread,milk,4.9
 ```
 
-4. Record Purchases via Cash Register
+3. Get the numbers of unique customers
+visit http://localhost:5000/uniqe_customers
+
+4. Get the numbers of loyal customers (who bought more than 3 times)
+visit http://localhost:5000/loyal_customers
+
+5. Get a list of three or product best sellers
+visit http://localhost:5000/best_sellers
+
+6. Record Purchases via Cash Register
 Visit http://localhost:5000:
 
 
@@ -131,24 +134,7 @@ User ID: u100
 Items: apple:3,bread:1
 ```
 
-4. Query the Most Recent Purchase
-Either UI exposes a JSON endpoint:
-GET /recent
 
-Example response:
-```text
-{
-  "id": 5,
-  "supermarket_id": "SM1",
-  "timestamp": "2025-10-28T09:30:00Z",
-  "user_id": "u002",
-  "total_amount": "3.40",
-  "items": [
-    {"product_name": "banana", "unit_price": "0.30", "quantity": 3, "line_total": "0.90"},
-    {"product_name": "milk", "unit_price": "2.50", "quantity": 1, "line_total": "2.50"}
-  ]
-}
-```
 
 ⚙️ Project Structure
 ```text
