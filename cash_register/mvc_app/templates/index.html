@@ -1,18 +1,75 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Cash Register</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="p-4">
   <div class="container">
     <h2>Cash Register</h2>
-    <form method="post" action="/create">
-      <div class="mb-3"><label>Supermarket ID</label><input class="form-control" name="supermarket_id" required></div>
-      <div class="mb-3"><label>User ID</label><input class="form-control" name="user_id" required></div>
-      <div class="mb-3"><label>Items (product_name:qty, comma-separated)</label><input class="form-control" name="items" placeholder="apple:2,banana:3" required></div>
-      <button class="btn btn-primary">Record Purchase</button>
+
+    <form id="purchase-form" method="post" action="/create">
+      <!-- Store dropdown -->
+      <div class="mb-3">
+        <label for="store_id" class="form-label">Store</label>
+        <select id="store_id" name="store_id" class="form-select" required>
+          <option value="">Select a store</option>
+          {% for s in stores %}
+            <option value="{{ s.store_id or s.id }}">{{ s.store_id or ('Store ' ~ s.id) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- User field and create button -->
+      <div class="mb-3 d-flex gap-2 align-items-end">
+        <div style="flex:1">
+          <label for="user_id" class="form-label">User ID</label>
+          <input id="user_id" name="user_id" class="form-control" required>
+        </div>
+        <div>
+          <button id="create-user-btn" type="button" class="btn btn-outline-primary">Create New Client</button>
+        </div>
+      </div>
+
+      <!-- Products selection -->
+      <div class="mb-3">
+        <label for="product_select" class="form-label">Select Product</label>
+        <div class="input-group">
+          <select id="product_select" class="form-select">
+            <option value="">Choose a product</option>
+            {% for p in products %}
+              <option value="{{ p.id }}" data-name="{{ p.product_name }}" data-price="{{ p.unit_price|float }}">{{ p.product_name }} — {{ p.unit_price|float }}</option>
+            {% endfor %}
+          </select>
+          <!-- quantity removed: one unit per selected product -->
+          <button id="add-product" type="button" class="btn btn-secondary">Add</button>
+        </div>
+      </div>
+
+      <!-- Selected items list -->
+      <div class="mb-3">
+        <label class="form-label">Items</label>
+        <ul id="items-list" class="list-group" aria-live="polite">
+          <!-- items will be appended here -->
+        </ul>
+      </div>
+
+      <!-- Visible total display -->
+      <div class="mb-3">
+        <label class="form-label">Total</label>
+        <div id="total_display" class="fs-4 fw-bold">$0.00</div>
+      </div>
+
+      <!-- Hidden fields for submission -->
+      <input type="hidden" name="items_list" id="items_list_input">
+      <input type="hidden" name="timestamp" id="timestamp_input">
+      <input type="hidden" name="total_amount" id="total_amount_input">
+
+      <button class="btn btn-primary">Complete Purchase</button>
     </form>
+
     <hr>
     {% with messages = get_flashed_messages() %}
       {% if messages %}
@@ -24,5 +81,101 @@
       {% endif %}
     {% endwith %}
   </div>
+
+  <script>
+    // Build a JS map of products so we can read name/price by id
+    const productsById = {};
+    {% for p in products %}
+      productsById["{{ p.id }}"] = {id: "{{ p.id }}", name: "{{ p.product_name }}", price: {{ p.unit_price|float }} };
+    {% endfor %}
+
+    const items = [];
+    const itemsListEl = document.getElementById('items-list');
+    const itemsInput = document.getElementById('items_list_input');
+    const totalInput = document.getElementById('total_amount_input');
+    const totalDisplayEl = document.getElementById('total_display');
+
+    function renderItems() {
+      itemsListEl.innerHTML = '';
+      let total = 0;
+      items.forEach((it, idx) => {
+        const li = document.createElement('li');
+        li.className = 'list-group-item d-flex justify-content-between align-items-center';
+
+        const left = document.createElement('div');
+        // quantity removed; each product counts as one
+        left.textContent = `${it.name}`;
+
+        const right = document.createElement('div');
+        right.className = 'd-flex gap-2 align-items-center';
+        const priceSpan = document.createElement('span');
+        priceSpan.textContent = (it.price).toFixed(2);
+        const del = document.createElement('button');
+        del.className = 'btn btn-sm btn-danger';
+        del.type = 'button';
+        del.textContent = 'Remove';
+        del.onclick = () => { items.splice(idx,1); renderItems(); };
+
+        right.appendChild(priceSpan);
+        right.appendChild(del);
+
+        li.appendChild(left);
+        li.appendChild(right);
+        itemsListEl.appendChild(li);
+
+        total += parseFloat(it.price);
+      });
+
+      itemsInput.value = JSON.stringify(items);
+      totalInput.value = total.toFixed(2);
+      if (totalDisplayEl) totalDisplayEl.textContent = `$${total.toFixed(2)}`;
+    }
+
+    document.getElementById('add-product').addEventListener('click', () => {
+      const sel = document.getElementById('product_select');
+      const pid = sel.value;
+      if (!pid) { alert('Please select a product'); return; }
+      // prevent duplicates
+      if (items.some(it => it.product_id === pid)) { alert('Product already added'); return; }
+      const prod = productsById[pid];
+      if (!prod) { alert('Selected product not found'); return; }
+      items.push({product_id: pid, name: prod.name, price: prod.price});
+      renderItems();
+    });
+
+    // create user button behavior: POST to /create_user and populate user_id
+    document.getElementById('create-user-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('create-user-btn');
+      btn.disabled = true;
+      try {
+        const resp = await fetch('/create_user', {method: 'POST'});
+        const data = await resp.json();
+        if (data.user_id) {
+          document.getElementById('user_id').value = data.user_id;
+          // small success indicator
+          btn.textContent = 'Created';
+          setTimeout(() => btn.textContent = 'Create New Client', 1500);
+        } else {
+          alert('Error creating user');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error creating user');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // before submitting, set timestamp and ensure items are present
+    document.getElementById('purchase-form').addEventListener('submit', (e) => {
+      if (items.length === 0) {
+        e.preventDefault();
+        alert('Please add at least one product');
+        return;
+      }
+      document.getElementById('timestamp_input').value = new Date().toISOString();
+      // items_input and total_input already kept up-to-date by renderItems
+    });
+  </script>
 </body>
 </html>
