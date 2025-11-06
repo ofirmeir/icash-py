@@ -10,5 +10,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py wait-for-postgres.sh ./
 RUN chmod +x wait-for-postgres.sh
 
+COPY mvc_app/ mvc_app/
+COPY log.cfg .
+
 EXPOSE 5000
 CMD ["./wait-for-postgres.sh", "python", "app.py"]

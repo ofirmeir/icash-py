@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+<head>
+  <title>Cash Register</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="p-4">
+  <div class="container">
+    <h2>Cash Register</h2>
+    <form method="post" action="/create">
+      <div class="mb-3"><label>Supermarket ID</label><input class="form-control" name="supermarket_id" required></div>
+      <div class="mb-3"><label>User ID</label><input class="form-control" name="user_id" required></div>
+      <div class="mb-3"><label>Items (product_name:qty, comma-separated)</label><input class="form-control" name="items" placeholder="apple:2,banana:3" required></div>
+      <button class="btn btn-primary">Record Purchase</button>
+    </form>
+    <hr>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="mt-3">
+          {% for m in messages %}
+            <div class="alert alert-info">{{m}}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+  </div>
+</body>
+</html>
