@@ -65,8 +65,8 @@ purchase_items (id, purchase_id, product_id, quantity, line_total)
 
 🐳 Quick Start
 1. Clone the repository
-git clone https://github.com/yourname/cash-register-management.git
-cd cash-register-management
+git clone [https://github.com/ofirmeir/icash-py.git](https://github.com/ofirmeir/icash-py.git)
+cd icash-py
 
 2. Build and start all services
 docker-compose up --build
@@ -121,40 +121,66 @@ Visit http://localhost:5000:
 Fill in supermarket ID and user ID.
 
 
-Enter items list (format: product_name:quantity,product_name:quantity)
+Enter items list
 
 
-Submit — the purchase will be stored in the DB.
+Complete Purchase — the purchase will be stored in the DB.
 
 
 Example input:
 ```text
 Supermarket ID: SM1
-User ID: u100
-Items: apple:3,bread:1
+User ID: 636de57b-89bc-40e4-9e9b-e008636d33ba
+Items: apple,bread
 ```
 
 
 
 ⚙️ Project Structure
 ```text
-cash-register-management/
-├── docker-compose.yml
-├── postgres/
-│   └── init.sql
+icash-py/
+├── docker-compose.yaml
+├── README.md
 ├── cash_register/
-│   ├── Dockerfile
 │   ├── app.py
+│   ├── Dockerfile
+│   ├── log.cfg
 │   ├── requirements.txt
-│   └── wait-for-postgres.sh
+│   ├── wait-for-postgres.sh
+│   ├── mvc_app/
+│   │   ├── __init__.py
+│   │   ├── controllers.py
+│   │   ├── db.py
+│   │   ├── logging_config.py
+│   │   ├── models.py
+│   │   ├── templates/
+│   │       ├── index.html
 ├── management/
-│   ├── Dockerfile
 │   ├── app.py
+│   ├── Dockerfile
+│   ├── log.cfg
 │   ├── requirements.txt
-│   └── wait-for-postgres.sh
-└── sample_csvs/
-    ├── products.csv
-    └── purchases.csv
+│   ├── wait-for-postgres.sh
+│   ├── mvc_app/
+│   │   ├── __init__.py
+│   │   ├── controllers.py
+│   │   ├── db.py
+│   │   ├── logging_config.py
+│   │   ├── models.py
+│   │   ├── templates/
+│   │       ├── best_sellers.html
+│   │       ├── index.html
+│   │       ├── loyal_customers.html
+│   │       ├── unique_customers.html
+│   ├── tests/
+│   │   ├── requirements-dev.txt
+│   │   ├── test_upload_purchases.py
+├── postgres/
+│   ├── init.sql
+├── sample_csvs/
+│   ├── products_list.csv
+│   ├── purchases.csv
+
 ```
 
 🧠 Implementation Notes
@@ -185,21 +211,6 @@ docker-compose down -v
 
 View logs
 docker-compose logs -f
-
-
-🧩 Future Enhancements
-
-
-📊 Add dashboard in Management UI (e.g., top products, revenue per day)
-
-
-✅ Add preview before importing purchases
-
-
-🧮 Add automatic data validation and error reports
-
-
-📦 Implement authentication between services
 
 
 
