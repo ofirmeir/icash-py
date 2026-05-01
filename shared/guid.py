@@ -8,6 +8,8 @@ class GUID(TypeDecorator):
     Uses Postgresql's UUID type, otherwise stores as CHAR(36).
     """
     impl = CHAR
+    # allow SQLAlchemy to cache instances of this TypeDecorator
+    cache_ok = True
 
     def load_dialect_impl(self, dialect):
         if dialect.name == 'postgresql':

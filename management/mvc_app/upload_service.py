@@ -169,17 +169,22 @@ def process_purchases_upload_from_request(request) -> UploadResult:
                     purchase_item = session.query(PurchaseItem).filter_by(
                         product_id=product_db_record.id,
                         user_id=user.id,
-                        purchase_id=purchase.id
+                        purchase_id=purchase.id,
                     ).first()
                     if not purchase_item:
                         logger.debug("Creating new PurchaseItem for product %s and user %s", item_name, user.id)
-                        new_pi = PurchaseItem(product_id=product_db_record.id, user_id=user.id, total_purchases=1, purchase_id=purchase.id)
+                        new_pi = PurchaseItem(
+                            product_id=product_db_record.id,
+                            user_id=user.id,
+                            total_purchases=1,
+                            purchase_id=purchase.id,
+                        )
                         session.add(new_pi)
                         # ensure the new PurchaseItem is visible to subsequent queries in this transaction
                         session.flush()
                     else:
                         purchase_item.total_purchases += 1
-                session.commit()
+                # commit is handled by the transaction context manager (with session.begin())
         return UploadResult(success=True, inserted_count=inserted_count, message=f"Loaded {inserted_count} purchases successfully.")
     except UploadError:
         session.rollback()
