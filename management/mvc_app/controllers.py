@@ -1,9 +1,18 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash
+from sqlalchemy import func, desc
+
 from .db import SessionLocal
-from .models import Product, Purchase, PurchaseItem, User, TotalUserPurchases, Store
-from .logging_config import setup_logging
-import pandas as pd
-from dateutil import parser
+from .models import Product, PurchaseItem, User
+
+from .upload_service import (
+    process_products_upload_from_request,
+    process_purchases_upload_from_request,
+    FileMissingError,
+    CSVParseError,
+    MissingColumnsError,
+    ProductNotFoundError,
+    ProcessingError,
+)
 import logging
 
 bp = Blueprint("main", __name__)
@@ -15,122 +24,68 @@ def index():
 @bp.route("/upload_products", methods=["POST"])
 def upload_products():
     logger = logging.getLogger("app.upload_products")
-    f = request.files.get("file")
-    if not f:
-        flash("No file uploaded")
-        logger.warning("No file uploaded")
-        return redirect(url_for("main.index"))
-    df = pd.read_csv(f)
-    if "product_name" not in df.columns or "unit_price" not in df.columns:
-        flash("CSV must have 'product_name' and 'unit_price'")
-        logger.warning("CSV missing required columns")
-        return redirect(url_for("main.index"))
-    session = SessionLocal()
     try:
-        logger.info("Uploading %d products", len(df))
-        for _, row in df.iterrows():
-            name = str(row["product_name"]).strip()
-            price = float(row["unit_price"])
-            existing = session.query(Product).filter_by(product_name=name).first()
-            if existing:
-                logger.debug("Updating price for %s", name)
-                existing.unit_price = price
-            else:
-                session.add(Product(product_name=name, unit_price=price))
-        session.commit()
-    finally:
-        session.close()
-    flash(f"Loaded {len(df)} products.")
-    return redirect(url_for("main.index"))
+        result = process_products_upload_from_request(request)
+        flash(result.message or f"Loaded {result.inserted_count} products.")
+        return redirect(url_for("main.index"))
+    except FileMissingError as e:
+        logger.warning(str(e))
+        flash(str(e))
+        return redirect(url_for("main.index"))
+    except MissingColumnsError as e:
+        logger.warning(str(e))
+        flash(f"CSV must have 'product_name' and 'unit_price'")
+        return redirect(url_for("main.index"))
+    except (CSVParseError, ProcessingError) as e:
+        logger.error("Failed to process products upload: %s", e)
+        flash("Failed to process uploaded products file")
+        return redirect(url_for("main.index"))
 
 @bp.route("/upload_purchases", methods=["POST"])
 def upload_purchases():
     logger = logging.getLogger("app.upload_purchases")
-    f = request.files.get("file")
-    if not f:
-        flash("No file uploaded")
-        logger.warning("No file uploaded")
-        return redirect(url_for("main.index"))
-    df = pd.read_csv(f)
-    expected_cols = {"supermarket_id", "timestamp", "user_id", "items_list", "total_amount"}
-    if not expected_cols.issubset(df.columns):
-        flash(f"CSV must have columns: {', '.join(expected_cols)}")
-        logger.warning("CSV missing required columns")
-        return redirect(url_for("main.index"))
-    inserted_count = 0
-    session = SessionLocal()
     try:
-        logger.info("Uploading %d purchases", len(df))
-        for _, row in df.iterrows():
-            supermarket_id = str(row["supermarket_id"]).strip()
-            timestamp = parser.parse(str(row["timestamp"]))
-            user_id = str(row["user_id"]).strip()
-            items_list_str = str(row["items_list"])
-            total_amount = float(row["total_amount"])
-            # Handle User
-            user = session.query(User).filter_by(user_id=user_id).first()
-            if not user:
-                logger.debug("Creating new user %s", user_id)
-                new_user = User(user_id=user_id)
-                new_total = TotalUserPurchases(user_id=user_id, total_purchases=1)
-                session.add(new_user)
-                session.add(new_total)
-                session.commit()
-            else:
-                logger.debug("Updating user %s", user_id)
-                existing_total = session.query(TotalUserPurchases).filter_by(user_id=user_id).first()
-                existing_total.total_purchases = (existing_total.total_purchases or 0) + 1
-                session.commit()
-            # Handle Items
-            items_list = [i.strip() for i in items_list_str.split(",") if i.strip()]
-            for item_name in items_list:
-                product_db_record = session.query(Product).filter_by(product_name=item_name).first()
-                if not product_db_record:
-                    logger.debug("Creating new product %s", item_name)
-                    session.rollback()
-                    return redirect(url_for("main.index"))
-                # Handle PurchaseItem
-                purchase_item = session.query(PurchaseItem).filter_by(product_id=product_db_record.id).first()
-                if not purchase_item:
-                    logger.debug("Creating new PurchaseItem for product %s", item_name)
-                    new_pi = PurchaseItem(product_id=product_db_record.id, total_purchases=1)
-                    session.add(new_pi)
-                else:
-                    purchase_item.total_purchases += 1
-                session.commit()
-            # Handle Store
-            store = session.query(Store).filter_by(store_id=supermarket_id).first()
-            if not store:
-                logger.debug("Store %s doesn't exist in the database", supermarket_id)
-                new_store = Store(store_id=supermarket_id)
-                session.add(new_store)
-                session.commit()
-            # Create Purchase
-            purchase = Purchase(
-                supermarket_id=supermarket_id,
-                timestamp=timestamp,
-                user_id=user_id,
-                items_list=items_list_str,
-                total_amount=total_amount
-            )
-            session.add(purchase)
-            inserted_count += 1
-            session.flush()
-    finally:
-        session.close()
-    flash(f"Loaded {inserted_count} purchases successfully.")
-    logger.info("Loaded %d purchases successfully.", inserted_count)
-    return redirect(url_for("main.index"))
+        result = process_purchases_upload_from_request(request)
+        flash(result.message or f"Loaded {result.inserted_count} purchases successfully.")
+        logger.info("Loaded %d purchases successfully.", result.inserted_count)
+        return redirect(url_for("main.index"))
+    except FileMissingError as e:
+        logger.warning(str(e))
+        flash(str(e))
+        return redirect(url_for("main.index"))
+    except MissingColumnsError as e:
+        logger.warning(str(e))
+        flash(f"CSV must have columns: supermarket_id, timestamp, user_id, items_list, total_amount")
+        return redirect(url_for("main.index"))
+    except ProductNotFoundError as e:
+        logger.warning("Product referenced in purchases file not found: %s", e.product_name)
+        flash(f"Product referenced in purchases file not found: {e.product_name}")
+        return redirect(url_for("main.index"))
+    except (CSVParseError, ProcessingError) as e:
+        logger.error("Failed to process purchases upload: %s", e)
+        flash("Failed to process uploaded purchases file")
+        return redirect(url_for("main.index"))
 
 @bp.route('/loyal_customers')
 def loyal_customers():
     session = SessionLocal()
     try:
         threshold = 3
-        loyal = session.query(User).join(TotalUserPurchases).filter(TotalUserPurchases.total_purchases >= threshold).order_by(TotalUserPurchases.total_purchases.desc()).all()
-        trimmed = [(c.user_id, c.total_purchases.total_purchases) for c in loyal]
-        logging.getLogger("app.loyal_customers").info("Number of loyal customers: %d", len(trimmed))
-        return render_template('loyal_customers.html', loyal_customers_list=trimmed)
+        # Sum PurchaseItem.total_purchases per user and filter by threshold
+        q = (
+            session.query(
+                User.uuid.label("uuid"),
+                func.coalesce(func.sum(PurchaseItem.total_purchases), 0).label("total_purchases")
+            )
+            .join(PurchaseItem, PurchaseItem.user_id == User.id)
+            .group_by(User.id)
+            .having(func.sum(PurchaseItem.total_purchases) > threshold)
+            .order_by(desc("total_purchases"))
+        )
+        results = q.all()
+        # results is list of (uuid, total_purchases)
+        logging.getLogger("app.loyal_customers").info("Number of loyal customers: %d", len(results))
+        return render_template('loyal_customers.html', loyal_customers_list=results)
     finally:
         session.close()
 
@@ -149,24 +104,33 @@ def best_sellers():
     session = SessionLocal()
     try:
         logger = logging.getLogger("app.best_sellers")
-        items = session.query(PurchaseItem).join(Product).order_by(PurchaseItem.total_purchases.desc()).all()
-        top_sellers_numbers = []
+        # Aggregate purchase counts per product (count rows in purchase_items)
+        q = (
+            session.query(
+                Product.product_name.label("product_name"),
+                func.count(PurchaseItem.id).label("purchases"),
+            )
+            .join(PurchaseItem, PurchaseItem.product_id == Product.id)
+            .group_by(Product.id)
+            .order_by(desc("purchases"))
+        )
+
+        rows = q.all()
+        top_amounts = set()
         top_sellers = []
-        for item in items:
-            if len(set(top_sellers_numbers)) <= 3:
-                checked_item_total_purchases = item.total_purchases
-                checked_item_product_name = item.product.product_name
-                if checked_item_total_purchases in top_sellers_numbers:
-                    top_sellers.append((checked_item_product_name, checked_item_total_purchases))
-                    continue
-                else:
-                    if len(set(top_sellers_numbers)) < 3:
-                        top_sellers_numbers.append(checked_item_total_purchases)
-                        top_sellers.append((checked_item_product_name, checked_item_total_purchases))
-                    else:
-                        break
-            else:
-                break
+        # Iterate ordered rows and keep at most three distinct purchase counts
+        for row in rows:
+            purchases = int(row.purchases)
+            product_name = row.product_name
+            if purchases in top_amounts:
+                top_sellers.append((product_name, purchases))
+                continue
+            if len(top_amounts) < 3:
+                top_amounts.add(purchases)
+                top_sellers.append((product_name, purchases))
+                continue
+            # already have three distinct top amounts, stop
+            break
         logging.getLogger("app.best_sellers").info("Top selling products retrieved")
         return render_template('best_sellers.html', top_sellers=top_sellers)
     finally:

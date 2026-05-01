@@ -87,32 +87,34 @@ def create_purchase():
         else:
             ts = datetime.now()
 
-        # create purchase with server-calculated total to prevent client tampering
+        # handle user creation/lookup first: form provides client-visible UUID string
+        user = session.query(User).filter_by(uuid=user_id).first()
+        if not user:
+            logger.debug("Creating new user with uuid %s", user_id)
+            user = User(uuid=user_id)
+            session.add(user)
+            session.commit()
+
+        # Now create purchase with server-calculated total and integer user.id foreign key
         purchase = Purchase(
             supermarket_id=store_id,
             timestamp=ts,
-            user_id=user_id,
+            user_id=user.id,
             items_list=items_list,
             total_amount=server_total
         )
         session.add(purchase)
         session.commit()
-        # handle user creation if not exists
-        user = session.query(User).filter_by(user_id=user_id).first()
-        if not user:
-            logger.debug("Creating new user %s", user_id)
-            new_user = User(user_id=user_id)
-            session.add(new_user)
+
+        # Update or create TotalUserPurchases for this integer user id
+        user_purchases = session.query(TotalUserPurchases).filter_by(user_id=user.id).first()
+        if not user_purchases:
+            logger.debug("Creating TotalUserPurchases record for user %s", user.id)
+            new_total = TotalUserPurchases(user_id=user.id, total_purchases=1)
+            session.add(new_total)
         else:
-            logger.debug("User %s exists, no need to create", user_id)
-            user_purchases = session.query(TotalUserPurchases).filter_by(user_id=user_id).first()
-            if not user_purchases:
-                logger.debug("Creating TotalUserPurchases record for user %s", user_id)
-                new_total = TotalUserPurchases(user_id=user_id, total_purchases=1)
-                session.add(new_total)
-            else:
-                logger.debug("Updating TotalUserPurchases for user %s", user_id)
-                user_purchases.total_purchases += 1
+            logger.debug("Updating TotalUserPurchases for user %s", user.id)
+            user_purchases.total_purchases += 1
         session.commit()
         # handle purchaseItems
         for pid in product_ids:
@@ -122,11 +124,11 @@ def create_purchase():
                 session.rollback()
                 flash(f"Product with ID {pid} does not exist")
                 return redirect(url_for("index"))
-            # Handle PurchaseItem
-            purchase_item = session.query(PurchaseItem).filter_by(product_id=product_db_record.id).first()
+            # Handle PurchaseItem (track per-user totals)
+            purchase_item = session.query(PurchaseItem).filter_by(product_id=product_db_record.id, user_id=user.id).first()
             if not purchase_item:
-                logger.debug("PurchaseItem for '%s' doesn't exist in the database", product_db_record.product_name)
-                new_item = PurchaseItem(product_id=product_db_record.id, total_purchases=1)
+                logger.debug("PurchaseItem for '%s' doesn't exist in the database for user %s", product_db_record.product_name, user.id)
+                new_item = PurchaseItem(product_id=product_db_record.id, user_id=user.id, total_purchases=1)
                 session.add(new_item)
             else:
                 purchase_item.total_purchases += 1
@@ -146,9 +148,10 @@ def create_user():
         # try a few times to avoid extremely rare collisions
         for _ in range(10):
             new_uuid = str(uuid.uuid4())
-            exists = session.query(User).filter_by(user_id=new_uuid).first()
+            exists = session.query(User).filter_by(uuid=new_uuid).first()
             if not exists:
-                user = User(user_id=new_uuid)
+                # create user row with the provided uuid value (so it becomes the client-visible id)
+                user = User(uuid=new_uuid)
                 session.add(user)
                 session.commit()
                 return jsonify({"user_id": new_uuid})
