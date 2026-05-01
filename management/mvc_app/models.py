@@ -1,5 +1,5 @@
-from sqlalchemy import Column, Integer, String, Numeric, ForeignKey, TIMESTAMP, text
-from sqlalchemy.orm import relationship, Relationship
+from sqlalchemy import Column, Integer, String, Numeric, ForeignKey, TIMESTAMP
+from sqlalchemy.orm import relationship
 from .db import Base
 from shared.guid import GUID
 
