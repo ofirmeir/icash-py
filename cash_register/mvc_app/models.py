@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, ForeignKey, TIMESTAMP, text
+from sqlalchemy import Column, Integer, String, Numeric, ForeignKey, TIMESTAMP
 from sqlalchemy.orm import relationship
 from .db import Base
 from shared.guid import GUID
@@ -12,10 +12,9 @@ class Product(Base):
 class Purchase(Base):
     __tablename__ = "purchases"
     id = Column(Integer, primary_key=True)
-    supermarket_id = Column(String, ForeignKey("stores.supermarket_id"), nullable=False)
+    supermarket_id = Column(Integer, ForeignKey("stores.id"), nullable=False)
     timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    items_list = Column(String, nullable=False)
     total_amount = Column(Numeric, nullable=False)
 
 class PurchaseItem(Base):
@@ -30,18 +29,17 @@ class PurchaseItem(Base):
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True)
-    uuid = Column(GUID(), unique=True, nullable=False)
-    total_purchases = relationship("TotalUserPurchases", back_populates="user", uselist=False)
-
-class TotalUserPurchases(Base):
-    __tablename__ = "user_total_purchases"
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    user = relationship("User", back_populates="total_purchases")
-    total_purchases = Column(Integer, nullable=True)
+    # use platform-neutral GUID type so tests can run on SQLite
+    # ensure GUID TypeDecorator is cache-friendly to avoid SQLAlchemy warnings
+    _guid_type = GUID()
+    try:
+        _guid_type.cache_ok = True
+    except Exception:
+        # older GUID implementations may not allow setting this; ignore in that case
+        pass
+    uuid = Column(_guid_type, unique=True, nullable=False)
 
 class Store(Base):
     __tablename__ = "stores"
     id = Column(Integer, primary_key=True)
     supermarket_id = Column(String, unique=True, nullable=False)
-

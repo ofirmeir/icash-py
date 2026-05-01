@@ -17,7 +17,7 @@
         <select id="store_id" name="store_id" class="form-select" required>
           <option value="">Select a store</option>
           {% for s in stores %}
-            <option value="{{ s.store_id or s.id }}">{{ s.store_id or ('Store ' ~ s.id) }}</option>
+            <option value="{{ s.supermarket_id or s.id }}">{{ s.supermarket_id or ('Store ' ~ s.id) }}</option>
           {% endfor %}
         </select>
       </div>

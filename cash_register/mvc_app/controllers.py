@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from .db import SessionLocal
-from .models import Product, Purchase, User, Store, PurchaseItem, TotalUserPurchases
+from .models import Product, Purchase, User, Store, PurchaseItem
 from dateutil import parser
 import uuid
 import json
@@ -95,27 +95,18 @@ def create_purchase():
             session.add(user)
             session.commit()
 
+        # get the store id from stores table
+        store_db = session.query(Store).filter_by(supermarket_id=store_id).first()
         # Now create purchase with server-calculated total and integer user.id foreign key
         purchase = Purchase(
-            supermarket_id=store_id,
+            supermarket_id=store_db.id,
             timestamp=ts,
             user_id=user.id,
-            items_list=items_list,
             total_amount=server_total
         )
         session.add(purchase)
         session.commit()
 
-        # Update or create TotalUserPurchases for this integer user id
-        user_purchases = session.query(TotalUserPurchases).filter_by(user_id=user.id).first()
-        if not user_purchases:
-            logger.debug("Creating TotalUserPurchases record for user %s", user.id)
-            new_total = TotalUserPurchases(user_id=user.id, total_purchases=1)
-            session.add(new_total)
-        else:
-            logger.debug("Updating TotalUserPurchases for user %s", user.id)
-            user_purchases.total_purchases += 1
-        session.commit()
         # handle purchaseItems
         for pid in product_ids:
             product_db_record = session.query(Product).filter_by(id=pid).first()
@@ -128,7 +119,7 @@ def create_purchase():
             purchase_item = session.query(PurchaseItem).filter_by(product_id=product_db_record.id, user_id=user.id).first()
             if not purchase_item:
                 logger.debug("PurchaseItem for '%s' doesn't exist in the database for user %s", product_db_record.product_name, user.id)
-                new_item = PurchaseItem(product_id=product_db_record.id, user_id=user.id, total_purchases=1)
+                new_item = PurchaseItem(product_id=product_db_record.id, user_id=user.id, total_purchases=1, purchase_id=purchase.id)
                 session.add(new_item)
             else:
                 purchase_item.total_purchases += 1
