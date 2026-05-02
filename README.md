@@ -120,8 +120,12 @@ PostgreSQL at localhost:5432
 
 Cash Register UI at http://localhost:5000
 
+<img width="1695" height="745" alt="Register" src="https://github.com/user-attachments/assets/9014916c-80bf-45eb-bc25-9549a544eb62" />
+
 
 Management UI at http://localhost:5001
+
+<img width="667" height="434" alt="management-index" src="https://github.com/user-attachments/assets/047f61f5-a01d-4c41-a2bb-d01edf443450" />
 
 
 All containers wait until PostgreSQL is ready using the included wait-for-postgres.sh script.
@@ -150,11 +154,20 @@ SM2,2025-10-28T10:00:00Z,9f8b7c6d-5e4f-3a2b-1c0d-abcdef123456,"bread,milk",4.9
 3. Get the numbers of unique customers
 visit http://localhost:5000/unique_customers
 
+<img width="443" height="205" alt="management-unique-customers" src="https://github.com/user-attachments/assets/0252b380-5eb2-44aa-a6e1-d8ecb0130c0d" />
+
+
 4. Get the numbers of loyal customers (who bought more than 3 times, paginated)
 visit http://localhost:5000/loyal_customers
 
+<img width="1702" height="265" alt="management-loyal-customers-pagination" src="https://github.com/user-attachments/assets/06915fec-46f4-442a-b1aa-ed6430ba28ba" />
+
+
 5. Get a list of three product best sellers (paginated)
 visit http://localhost:5000/best_sellers
+
+<img width="1015" height="429" alt="management-best-seller" src="https://github.com/user-attachments/assets/7598494b-9870-46d2-a5da-76a2b4aab4ea" />
+
 
 6. Record Purchases via Cash Register
 Visit http://localhost:5000:
@@ -175,6 +188,7 @@ Supermarket ID: SM1
 User ID: 636de57b-89bc-40e4-9e9b-e008636d33ba
 Items: apple,bread
 ```
+<img width="1695" height="745" alt="Register" src="https://github.com/user-attachments/assets/b225fdf9-6f8c-4f27-ad57-d50382ee9902" />
 
 
 
