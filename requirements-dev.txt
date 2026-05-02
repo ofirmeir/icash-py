@@ -1,0 +1,6 @@
+pytest
+pandas
+python-dateutil
+Flask
+SQLAlchemy
+psycopg2-binary

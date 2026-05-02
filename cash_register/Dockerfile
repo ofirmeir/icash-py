@@ -11,6 +11,7 @@ COPY app.py wait-for-postgres.sh ./
 RUN chmod +x wait-for-postgres.sh
 
 COPY mvc_app/ mvc_app/
+COPY shared/ shared/
 COPY log.cfg .
 
 EXPOSE 5000
