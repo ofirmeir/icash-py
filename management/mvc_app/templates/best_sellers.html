@@ -28,8 +28,16 @@
           </tbody>
         </table>
       </div>
+      <div class="d-flex justify-content-between align-items-center mt-3">
+        <div>
+          Showing {{ start }}–{{ end }} of {{ total }}
+        </div>
+        <div>
+          {{ pagination.links|safe }}
+        </div>
+      </div>
     {% else %}
-      <div class="alert alert-info">No loyal customers found.</div>
+      <div class="alert alert-info">No best sellers found.</div>
     {% endif %}
   </div>
 </body>

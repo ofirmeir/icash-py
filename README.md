@@ -20,11 +20,11 @@ All services run in Docker containers orchestrated with Docker Compose.
 |   Cash Register UI  | <----> |   PostgreSQL (DB)   |
 |  Flask Microservice |        |     appdb           |
 +---------------------+        +---------------------+
-           ↑
-           |
-           ↓
-+---------------------+
-|   Management UI     |
+                                          ↑
+                                          |
+                                          |
++---------------------+                   |
+|   Management UI     | <-----------------+
 |  Flask Microservice |
 +---------------------+
 ```
@@ -150,10 +150,10 @@ SM2,2025-10-28T10:00:00Z,9f8b7c6d-5e4f-3a2b-1c0d-abcdef123456,"bread,milk",4.9
 3. Get the numbers of unique customers
 visit http://localhost:5000/unique_customers
 
-4. Get the numbers of loyal customers (who bought more than 3 times)
+4. Get the numbers of loyal customers (who bought more than 3 times, paginated)
 visit http://localhost:5000/loyal_customers
 
-5. Get a list of three product best sellers
+5. Get a list of three product best sellers (paginated)
 visit http://localhost:5000/best_sellers
 
 6. Record Purchases via Cash Register
