@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from sqlalchemy import func, desc
+from flask_paginate import Pagination
 
 from .db import SessionLocal
 from .models import Product, PurchaseItem, User
@@ -71,6 +72,18 @@ def loyal_customers():
     session = SessionLocal()
     try:
         threshold = 3
+        # Parse and validate pagination params (default per_page=20, max 50)
+        try:
+            page = int(request.args.get('page', 1))
+        except Exception:
+            page = 1
+        try:
+            per_page = int(request.args.get('limit', 20))
+        except Exception:
+            per_page = 20
+        page = max(1, page)
+        per_page = max(1, min(per_page, 50))
+
         # Sum PurchaseItem.total_purchases per user and filter by threshold
         q = (
             session.query(
@@ -82,10 +95,30 @@ def loyal_customers():
             .having(func.sum(PurchaseItem.total_purchases) > threshold)
             .order_by(desc("total_purchases"))
         )
-        results = q.all()
-        # results is list of (uuid, total_purchases)
-        logging.getLogger("app.loyal_customers").info("Number of loyal customers: %d", len(results))
-        return render_template('loyal_customers.html', loyal_customers_list=results)
+
+        # Count total results using subquery
+        try:
+            subq = q.subquery()
+            total = session.query(func.count()).select_from(subq).scalar() or 0
+        except Exception:
+            # fallback to fetching all rows (should not happen normally)
+            total = len(q.all())
+
+        # Apply pagination
+        results = q.limit(per_page).offset((page - 1) * per_page).all()
+
+        # compute display range
+        start = (page - 1) * per_page + 1 if total > 0 else 0
+        end = min(page * per_page, total)
+
+        pagination = Pagination(page=page, total=total, per_page=per_page,
+                                record_name='customers', css_framework='bootstrap5',
+                                href=f"?limit={per_page}&page={{0}}")
+
+        logging.getLogger("app.loyal_customers").info("Number of loyal customers: %d", total)
+        return render_template('loyal_customers.html', loyal_customers_list=results,
+                               pagination=pagination, page=page, per_page=per_page,
+                               total=total, start=start, end=end)
     finally:
         session.close()
 
@@ -115,24 +148,41 @@ def best_sellers():
             .order_by(desc("purchases"))
         )
 
-        rows = q.all()
-        top_amounts = set()
-        top_sellers = []
-        # Iterate ordered rows and keep at most three distinct purchase counts
-        for row in rows:
-            purchases = int(row.purchases)
-            product_name = row.product_name
-            if purchases in top_amounts:
-                top_sellers.append((product_name, purchases))
-                continue
-            if len(top_amounts) < 3:
-                top_amounts.add(purchases)
-                top_sellers.append((product_name, purchases))
-                continue
-            # already have three distinct top amounts, stop
-            break
+        # Parse and validate pagination params (default per_page=20, max 50)
+        try:
+            page = int(request.args.get('page', 1))
+        except Exception:
+            page = 1
+        try:
+            per_page = int(request.args.get('limit', 20))
+        except Exception:
+            per_page = 20
+        page = max(1, page)
+        per_page = max(1, min(per_page, 50))
+
+        # Count total aggregated rows via subquery
+        try:
+            subq = q.subquery()
+            total = session.query(func.count()).select_from(subq).scalar() or 0
+        except Exception:
+            total = len(q.all())
+
+        # Apply pagination to aggregated query (Option A: paginate full aggregated list)
+        rows = q.limit(per_page).offset((page - 1) * per_page).all()
+
+        # compute display range
+        start = (page - 1) * per_page + 1 if total > 0 else 0
+        end = min(page * per_page, total)
+
+        pagination = Pagination(page=page, total=total, per_page=per_page,
+                                record_name='products', css_framework='bootstrap5',
+                                href=f"?limit={per_page}&page={{0}}")
+
         logging.getLogger("app.best_sellers").info("Top selling products retrieved")
-        return render_template('best_sellers.html', top_sellers=top_sellers)
+        # rows are tuples (product_name, purchases)
+        return render_template('best_sellers.html', top_sellers=rows,
+                               pagination=pagination, page=page, per_page=per_page,
+                               total=total, start=start, end=end)
     finally:
         session.close()
 
